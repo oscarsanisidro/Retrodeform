@@ -1,0 +1,1462 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RetroDeform · 3D Retrodeformation Tool</title>
+<meta name="description" content="Open-access browser tool for TPS-based bilateral retrodeformation of 2D images and 3D anatomical models.">
+<meta name="author" content="Oscar Sanisidro">
+<meta name="copyright" content="© Oscar Sanisidro">
+<style>
+:root {
+  --bg:        #111318;
+  --panel:     #1b1e27;
+  --panel2:    #22263a;
+  --border:    #2e3450;
+  --accent:    #4f8ef7;
+  --accent2:   #7c5af5;
+  --danger:    #e05260;
+  --success:   #3ecf8e;
+  --warn:      #f5a623;
+  --text:      #e2e6f0;
+  --text2:     #8892a8;
+  --right-col: #ff5555;
+  --left-col:  #5599ff;
+  --radius:    8px;
+  --sidebar:   310px;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; font-size: 13.5px; }
+#app    { display: flex; flex-direction: column; height: 100vh; }
+#topbar { display: flex; align-items: center; gap: 10px; padding: 8px 16px; background: var(--panel); border-bottom: 1px solid var(--border); flex-shrink: 0; }
+#topbar h1 { font-size: 15px; font-weight: 700; letter-spacing: .5px; color: var(--accent); }
+#topbar .subtitle { font-size: 11px; color: var(--text2); }
+#body   { display: flex; flex: 1; overflow: hidden; }
+#sidebar { width: var(--sidebar); min-width: var(--sidebar); background: var(--panel); border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
+#viewer { flex: 1; position: relative; background: #0a0c12; }
+canvas  { width: 100% !important; height: 100% !important; display: block; }
+.sb-section { padding: 12px 14px; border-bottom: 1px solid var(--border); }
+.sb-label   { font-size: 10.5px; font-weight: 700; letter-spacing: 1px; color: var(--text2); text-transform: uppercase; margin-bottom: 8px; }
+#sb-scroll  { flex: 1; overflow-y: auto; overflow-x: hidden; display: flex; flex-direction: column; }
+#sb-scroll::-webkit-scrollbar { width: 4px; }
+#sb-scroll::-webkit-scrollbar-track { background: transparent; }
+#sb-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 7px 12px; border-radius: var(--radius); border: none;
+  font-size: 12px; font-weight: 600; cursor: pointer; transition: all .15s;
+  white-space: nowrap;
+}
+.btn-primary  { background: var(--accent);  color: #fff; }
+.btn-primary:hover:not(:disabled) { filter: brightness(1.15); }
+.btn-success  { background: var(--success); color: #0a2018; }
+.btn-success:hover:not(:disabled) { filter: brightness(1.1); }
+.btn-ghost    { background: var(--panel2); color: var(--text); border: 1px solid var(--border); }
+.btn-ghost:hover:not(:disabled) { background: var(--border); }
+.btn-danger   { background: var(--danger); color: #fff; }
+.btn-danger:hover:not(:disabled) { filter: brightness(1.1); }
+.btn-sm       { padding: 4px 8px; font-size: 11px; border-radius: 5px; }
+.btn:disabled { opacity: .4; cursor: not-allowed; }
+.btn-full     { width: 100%; }
+.btn-toggle-group { display: flex; gap: 0; border-radius: var(--radius); overflow: hidden; border: 1px solid var(--border); }
+.btn-toggle-group .btn { border-radius: 0; flex: 1; }
+.btn-toggle-group .btn.active { background: var(--accent); color: #fff; }
+.btn-ghost.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+#drop-zone {
+  border: 2px dashed var(--border); border-radius: var(--radius);
+  padding: 18px 10px; text-align: center; cursor: pointer; transition: all .2s;
+  background: var(--panel2);
+}
+#drop-zone:hover, #drop-zone.dragover { border-color: var(--accent); background: #1d2340; }
+#drop-zone .dz-icon  { font-size: 28px; margin-bottom: 6px; }
+#drop-zone .dz-text  { color: var(--text2); font-size: 12px; line-height: 1.5; }
+#drop-zone .dz-hint  { color: var(--text2); font-size: 10px; margin-top: 4px; }
+#file-input { display: none; }
+#mesh-info { font-size: 11px; color: var(--text2); margin-top: 6px; }
+#mesh-info span { color: var(--text); font-weight: 600; }
+.mode-btn { flex: 1; padding: 7px 6px; }
+.mode-btn.active { background: var(--accent2); color: #fff; }
+
+/* ── Landmark list ── */
+#lm-list-wrap {
+  max-height: 185px;      /* ~5 pairs visible */
+  overflow-y: auto;
+  padding-right: 2px;
+  margin-bottom: 2px;
+}
+#lm-list-wrap::-webkit-scrollbar { width: 4px; }
+#lm-list-wrap::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+#lm-list { display: flex; flex-direction: column; gap: 5px; }
+.lm-pair  {
+  background: var(--panel2); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 7px 9px; display: flex; align-items: center; gap: 6px;
+}
+.pair-num { font-size: 10px; color: var(--text2); font-weight: 700; min-width: 28px; }
+.lm-dot   { width: 11px; height: 11px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+.lm-dot.right { background: var(--right-col); }
+.lm-dot.left  { background: var(--left-col);  }
+.lm-dot.empty { background: transparent; border: 1px dashed var(--text2); }
+.delete-pair { margin-left: auto; background: none; border: none; cursor: pointer; color: var(--text2); font-size: 14px; padding: 0 3px; line-height: 1; }
+.delete-pair:hover { color: var(--danger); }
+.lm-next-hint { font-size: 11px; color: var(--warn); font-style: italic; padding: 3px 0; }
+
+/* ── Displacement legend ── */
+#disp-legend { display: none; margin-top: 6px; }
+#disp-legend.visible { display: block; }
+.legend-bar {
+  height: 10px; border-radius: 4px;
+  background: linear-gradient(to right, #4488ff, #44cc88, #ffcc22, #ff4444);
+  margin: 4px 0;
+}
+.legend-labels { display: flex; justify-content: space-between; font-size: 10px; color: var(--text2); }
+
+/* ── Status bar ── */
+#status-bar { padding: 8px 14px; background: var(--panel2); border-top: 1px solid var(--border); font-size: 11px; color: var(--text2); flex-shrink: 0; }
+#status-bar .status-ok   { color: var(--success); }
+#status-bar .status-warn { color: var(--warn); }
+#status-bar .status-err  { color: var(--danger); }
+#status-bar .status-busy { color: var(--accent); }
+
+/* ── Viewer overlays ── */
+#viewer-overlay {
+  position: absolute; inset: 0; pointer-events: none;
+  display: flex; align-items: center; justify-content: center;
+}
+#upload-hint { display: flex; flex-direction: column; align-items: center; gap: 10px; color: var(--text2); text-align: center; }
+#upload-hint .big-icon  { font-size: 52px; opacity: .35; }
+#upload-hint .hint-text { font-size: 14px; opacity: .5; }
+#viewer-controls { position: absolute; top: 10px; right: 10px; display: flex; flex-direction: column; gap: 5px; }
+#view-toggle-bar { position: absolute; top: 52px; left: 50%; transform: translateX(-50%); display: none; }
+#view-toggle-bar.visible { display: flex; }
+#progress-bar {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  height: 3px; background: var(--accent);
+  transform: scaleX(0); transform-origin: left;
+  transition: transform .3s; display: none;
+}
+#tooltip {
+  position: absolute; background: rgba(0,0,0,.85); color: var(--text);
+  padding: 4px 8px; border-radius: 5px; font-size: 11px; pointer-events: none;
+  display: none; z-index: 10; white-space: nowrap;
+}
+body.mode-landmarks canvas { cursor: crosshair; }
+body.mode-scale canvas { cursor: crosshair; }
+.sb-collapsible { cursor: pointer; user-select: none; display: flex; align-items: center; justify-content: space-between; }
+.sb-collapsible::after { content: '▾'; font-size: 10px; color: var(--text2); transition: transform .2s; }
+.sb-collapsible.collapsed::after { transform: rotate(-90deg); }
+
+/* ── Info button & popover ── */
+.info-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 17px; height: 17px; border-radius: 50%; border: 1.5px solid var(--text2);
+  background: none; color: var(--text2); font-size: 10px; font-weight: 700;
+  cursor: pointer; flex-shrink: 0; transition: all .15s; line-height: 1;
+}
+.info-btn:hover { border-color: var(--accent); color: var(--accent); }
+#info-modal-overlay {
+  display: none; position: fixed; inset: 0; z-index: 100;
+  background: rgba(0,0,0,.55); align-items: center; justify-content: center;
+}
+#info-modal-overlay.open { display: flex; }
+#info-modal {
+  background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+  padding: 22px 24px; max-width: 420px; width: 90%; position: relative;
+  box-shadow: 0 8px 40px rgba(0,0,0,.6); line-height: 1.6;
+}
+#info-modal h2 { font-size: 14px; color: var(--accent); margin-bottom: 10px; }
+#info-modal p, #info-modal li { font-size: 12px; color: var(--text2); }
+#info-modal strong { color: var(--text); }
+#info-modal ul { padding-left: 16px; margin: 8px 0; }
+#info-modal code { background: var(--panel2); border-radius: 3px; padding: 1px 5px; font-size: 11px; color: #aad4ff; }
+#info-modal .ref { font-size: 10px; color: var(--text2); margin-top: 12px; border-top: 1px solid var(--border); padding-top: 8px; font-style: italic; }
+#info-close {
+  position: absolute; top: 10px; right: 12px;
+  background: none; border: none; color: var(--text2); font-size: 18px; cursor: pointer; line-height: 1;
+}
+#info-close:hover { color: var(--text); }
+
+/* ── Viewer step guide ── */
+#viewer-guide {
+  position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+  background: rgba(15,18,30,0.86); border: 1px solid var(--border);
+  border-radius: 24px; padding: 7px 22px;
+  font-size: 14px; color: var(--text2); white-space: nowrap;
+  pointer-events: none; z-index: 5;
+  backdrop-filter: blur(8px);
+  transition: opacity .3s;
+  letter-spacing: .1px;
+}
+#viewer-guide .step-num  { color: var(--accent); font-weight: 800; margin-right: 7px; font-size: 15px; }
+#viewer-guide .step-hi   { color: var(--text);    font-weight: 700; }
+#viewer-guide .step-warn { color: var(--warn);    font-weight: 700; }
+#viewer-guide .step-ok   { color: var(--success); font-weight: 700; }
+@keyframes guide-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(255,255,255,0); border-color: var(--border); }
+  20%  { box-shadow: 0 0 0 5px rgba(255,255,255,0.25); border-color: rgba(255,255,255,0.85); }
+  60%  { box-shadow: 0 0 0 8px rgba(255,255,255,0.10); border-color: rgba(255,255,255,0.55); }
+  100% { box-shadow: 0 0 0 0 rgba(255,255,255,0); border-color: var(--border); }
+}
+#viewer-guide.guide-anim { animation: guide-pulse 3s ease-out forwards; }
+
+/* ── Citation modal ── */
+.modal-overlay {
+  display: none; position: fixed; inset: 0; z-index: 100;
+  background: rgba(0,0,0,.55); align-items: center; justify-content: center;
+}
+.modal-overlay.open { display: flex; }
+.modal-box {
+  background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+  padding: 22px 24px; max-width: 520px; width: 90%; position: relative;
+  box-shadow: 0 8px 40px rgba(0,0,0,.6); line-height: 1.6;
+}
+.modal-box h2 { font-size: 14px; color: var(--accent); margin-bottom: 10px; }
+.modal-box p  { font-size: 12px; color: var(--text2); }
+.modal-box .ref { font-size: 10px; color: var(--text2); margin-top: 12px; border-top: 1px solid var(--border); padding-top: 8px; }
+.modal-close {
+  position: absolute; top: 10px; right: 12px;
+  background: none; border: none; color: var(--text2); font-size: 18px; cursor: pointer; line-height: 1;
+}
+.modal-close:hover { color: var(--text); }
+.cite-box {
+  margin-top: 6px; background: var(--panel2); border: 1px solid var(--border); border-radius: 6px;
+  padding: 8px 10px; font-size: 12px; color: var(--text); user-select: text; word-break: break-word;
+}
+
+body::-webkit-scrollbar { display: none; }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <div id="topbar">
+    <div>🦴</div>
+    <h1>RetroDeform: An online 3D Retrodeformation Tool</h1>
+    <div class="subtitle"> · An open-access tool for the digital retrodeformation of 2D images and 3D anatomical models</div>
+    <div style="margin-left:auto; display:flex; align-items:center; gap:12px;">
+      <button class="btn btn-ghost btn-sm" id="btn-cite" title="How to cite RetroDeform">❝ How to cite</button>
+      <div class="subtitle">© <span id="copy-year">2026</span> Oscar Sanisidro</div>
+    </div>
+  </div>
+
+  <div id="body">
+    <div id="sidebar">
+      <div id="sb-scroll">
+
+        <div class="sb-section">
+          <div class="sb-label">1 · Model / Image</div>
+          <div id="drop-zone">
+            <div class="dz-icon">📂</div>
+            <div class="dz-text">Drag your model or image here<br>or click to select</div>
+            <div class="dz-hint">3D: OBJ · PLY &nbsp;|&nbsp; 2D: PNG · JPG</div>
+          </div>
+          <input type="file" id="file-input" accept=".obj,.ply,.png,.jpg,.jpeg,.webp,.bmp">
+          <div id="mesh-info"></div>
+        </div>
+
+        <div class="sb-section">
+          <div class="sb-label">2 · Interaction mode</div>
+          <div class="btn-toggle-group" id="mode-group">
+            <button class="btn mode-btn active" id="btn-navigate">🔄 Navigate</button>
+            <button class="btn mode-btn" id="btn-landmarks" disabled>📍 Landmark</button>
+          </div>
+          <div style="margin-top:7px; font-size:11px; color:var(--text2); line-height:1.5;" id="mode-hint">
+            Load a 3D model to begin.
+          </div>
+        </div>
+
+        <div class="sb-section">
+          <div class="sb-label sb-collapsible" id="lm-header">3 · Landmark pairs</div>
+          <div id="lm-body">
+            <div id="lm-list-wrap">
+              <div id="lm-list"></div>
+            </div>
+            <div id="lm-next-hint" class="lm-next-hint" style="display:none"></div>
+            <div style="margin-top:8px; display:flex; gap:6px; flex-wrap:wrap;">
+              <button class="btn btn-ghost btn-sm" id="btn-add-pair" disabled>＋ New pair</button>
+              <button class="btn btn-ghost btn-sm" id="btn-clear-lm" disabled>🗑 Clear</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="sb-section">
+          <div class="sb-label">Parameters</div>
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;">
+            <label style="color:var(--text2); font-size:11px;">TPS Regularization (α)</label>
+            <input type="number" id="alpha-input" value="0.00001" step="0.000001" min="0"
+              style="width:90px; background:var(--panel2); border:1px solid var(--border); color:var(--text); border-radius:4px; padding:3px 6px; font-size:11px;">
+          </div>
+          <div style="font-size:10px; color:var(--text2);">
+            LM order: <strong style="color:var(--text)">alternating</strong> (Right₁ · Left₁ · Right₂ · Left₂ …)
+          </div>
+        </div>
+
+        <div class="sb-section">
+          <div style="display:flex; align-items:center; gap:6px; margin-bottom:8px;">
+            <div class="sb-label" style="margin-bottom:0;">4 · Retrodeformation</div>
+            <button class="info-btn" id="btn-info" title="About this method">?</button>
+          </div>
+          <button class="btn btn-success btn-full" id="btn-retrodeform" disabled>
+            ▶ Retrodeform
+          </button>
+          <div style="font-size:10px; color:var(--text2); margin-top:5px;" id="retrodef-hint">
+            You need ≥ 2 landmark pairs.
+          </div>
+        </div>
+
+        <div class="sb-section">
+          <div class="sb-label">5 · View</div>
+          <div class="btn-toggle-group" style="margin-bottom:8px;">
+            <button class="btn active" id="btn-view-orig" disabled>Original</button>
+            <button class="btn" id="btn-view-retro" disabled>Retrodeformed</button>
+          </div>
+          <div id="disp-legend">
+            <div style="font-size:10px; color:var(--text2); margin-bottom:3px;" id="disp-title">Vertex displacement:</div>
+            <div class="legend-bar"></div>
+            <div class="legend-labels"><span>0</span><span id="legend-max">—</span></div>
+            <div id="disp-stats" style="margin-top:5px; font-size:10px; color:var(--text2); display:none;">
+              Mean: <span id="disp-mean" style="color:var(--text); font-weight:600;">—</span>
+              &nbsp;·&nbsp; Max: <span id="disp-max-val" style="color:var(--text); font-weight:600;">—</span>
+            </div>
+          </div>
+          <div id="mm-scale-box" style="margin-top:8px; padding:7px 8px; border:1px dashed var(--border); border-radius:6px; display:none;">
+            <div style="font-size:10px; color:var(--text2); margin-bottom:5px;">
+              📐 Scale to mm <span style="opacity:.6;">(optional)</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:5px; margin-bottom:4px;">
+              <button class="btn btn-ghost btn-sm" id="btn-draw-scale" style="flex:1; font-size:10px;">📏 Click 2 pts on mesh</button>
+              <button class="btn btn-ghost btn-sm" id="btn-reset-scale" style="font-size:10px; padding:4px 7px;" title="Reset scale bar">↺</button>
+            </div>
+            <div style="font-size:10px; color:var(--text2); margin-bottom:4px;" id="scale-dist-hint">Draw a scale bar on the mesh first.</div>
+            <div style="display:flex; align-items:center; gap:5px;">
+              <label style="font-size:10px; color:var(--text2); white-space:nowrap;">Real dist.</label>
+              <input type="number" id="mm-dist-input" min="0.001" step="0.1" placeholder="e.g. 24.5"
+                style="flex:1; background:var(--panel2); border:1px solid var(--border); color:var(--text); border-radius:4px; padding:2px 6px; font-size:10px;">
+              <span style="font-size:10px; color:var(--text2);">mm</span>
+            </div>
+            <div style="font-size:10px; color:var(--text2); margin-top:4px;" id="mm-scale-hint">Draw a scale bar on the mesh to enable mm conversion.</div>
+          </div>
+          <div style="margin-top:8px; display:flex; gap:6px; flex-wrap:wrap;">
+            <button class="btn btn-ghost btn-sm" id="btn-toggle-plane" disabled title="Show/hide symmetry plane estimated from landmarks">
+              ◈ Sagittal plane
+            </button>
+            <button class="btn btn-ghost btn-sm" id="btn-toggle-lm" disabled title="Show/hide landmark spheres">
+              ● Landmarks
+            </button>
+            <button class="btn btn-ghost btn-sm" id="btn-toggle-scale" disabled title="Show/hide scale bar">
+              📏 Scale
+            </button>
+          </div>
+        </div>
+
+        <div class="sb-section" style="padding-bottom:16px;">
+          <div class="sb-label">6 · Export</div>
+          <button class="btn btn-primary btn-full" id="btn-download" disabled>
+            <span id="btn-download-label">⬇ Download retrodeformed PLY</span>
+          </button>
+          <div style="margin-top:6px; display:flex; gap:6px;">
+            <button class="btn btn-ghost btn-sm" id="btn-export-tps" style="flex:1;" disabled title="Landmarks as placed on the original model (TPS format)">
+              ⬇ Landmarks (.tps)
+            </button>
+            <button class="btn btn-ghost btn-sm" id="btn-export-tps-sym" style="flex:1;" disabled title="Symmetrized target landmarks used for the TPS warp (TPS format)">
+              ⬇ Symmetrized (.tps)
+            </button>
+          </div>
+          <div style="font-size:10px; color:var(--text2); margin-top:5px; line-height:1.4;">
+            Coordinates in the original file's frame (2D: pixels, origin bottom-left, as in tpsDig). Order: Right₁, Left₁, Right₂, Left₂ …
+          </div>
+        </div>
+
+      </div>
+
+      <div id="status-bar">
+        <span id="status-text" class="status-ok">Ready. Load a model to begin.</span>
+      </div>
+    </div>
+
+    <div id="viewer">
+      <canvas id="canvas"></canvas>
+      <div id="viewer-overlay">
+        <div id="upload-hint">
+          <div class="big-icon">🦴</div>
+          <div class="hint-text">Load a 3D model (OBJ or PLY)<br>or a 2D image (PNG or JPG) to get started</div>
+        </div>
+      </div>
+      <div id="viewer-guide">
+        <span id="viewer-guide-text"></span>
+      </div>
+
+      <div id="view-toggle-bar">
+        <div class="btn-toggle-group">
+          <button class="btn btn-sm active" id="btn-view-orig2">Original</button>
+          <button class="btn btn-sm" id="btn-view-retro2">Retrodeformed 🎨</button>
+        </div>
+      </div>
+      <div id="viewer-controls">
+        <button class="btn btn-ghost btn-sm" id="btn-reset-cam">⊙ Reset</button>
+        <button class="btn btn-ghost btn-sm" id="btn-wireframe">Mesh</button>
+        <button class="btn btn-ghost btn-sm" id="btn-ortho">Ortho</button>
+      </div>
+      <div id="progress-bar"></div>
+      <div id="tooltip"></div>
+    </div>
+  </div>
+</div>
+
+<div id="info-modal-overlay">
+  <div id="info-modal">
+    <button id="info-close">✕</button>
+    <h2>🔬 Bilateral Retrodeformation</h2>
+    <p>This tool removes taphonomic deformation from bilaterally symmetric structures (e.g. skulls) using paired landmarks placed on both sides of the specimen. It works on <strong>3D meshes</strong> (OBJ/PLY) and on <strong>2D images</strong> (PNG/JPG, e.g. a photograph in dorsal or ventral view), where the symmetry plane becomes a midline.</p>
+    <p style="margin-top:8px;"><strong>Algorithm (Schlager et al. 2018):</strong></p>
+    <ul>
+      <li><strong>Symmetry plane</strong> — estimated from the mean of unit vectors connecting each right–left landmark pair.</li>
+      <li><strong>Symmetrization</strong> — left landmarks are reflected across the plane, averaged with the right-side counterpart; the symmetric left position is then the mirror of the resulting right position.</li>
+      <li><strong>TPS warp</strong> — a Thin Plate Spline deformation maps all mesh vertices from the asymmetric configuration to the symmetric one.</li>
+    </ul>
+    <p style="margin-top:8px;">Equivalent to <code>Morpho::retrodeform()</code> in R and to <code>bilat.symmetry()</code> (object symmetry) in <strong>geomorph</strong>. The <strong>α</strong> parameter controls TPS regularization — increase it if the result shows unexpected warping near the landmarks.</p>
+    <p style="margin-top:8px;"><strong>Landmark placement:</strong> click <em>Right side first</em> (🔴), then the corresponding <em>Left side</em> (🔵), repeating for each pair. A minimum of 2 pairs is required; 5–10 well-distributed pairs typically give the best results.</p>
+    <div class="ref">
+      Schlager S, Rüdell A, Wachter R (2018). <em>Morpho and Rvcg — Shape Analysis in R.</em> In: Statistical Shape and Deformation Analysis, pp. 217–256. Academic Press.<br>
+      Adams DC, Collyer ML, Kaliontzopoulou A (2024). <em>Geomorph: Software for geometric morphometric analyses.</em> R package v4.0.
+    </div>
+  </div>
+</div>
+
+<div id="cite-modal-overlay" class="modal-overlay">
+  <div id="cite-modal" class="modal-box">
+    <button class="modal-close" id="cite-close">✕</button>
+    <h2>❝ How to cite RetroDeform</h2>
+    <p>If you use RetroDeform in your research, please cite it as:</p>
+    <div id="cite-text" class="cite-box"></div>
+    <div style="display:flex; gap:6px; margin-top:8px;">
+      <button class="btn btn-primary btn-sm" id="btn-copy-cite">📋 Copy citation</button>
+      <button class="btn btn-ghost btn-sm" id="btn-copy-bib">📋 Copy BibTeX</button>
+      <span id="cite-copied" style="font-size:11px; color:var(--success); align-self:center; display:none;">Copied!</span>
+    </div>
+    <p style="margin-top:12px;">Please also cite the method on which the retrodeformation is based:</p>
+    <div class="cite-box">Schlager S, Rüdell A, Wachter R (2018). Morpho and Rvcg — Shape Analysis in R. In: Zheng G, Li S, Székely G (eds.), <em>Statistical Shape and Deformation Analysis</em>, pp. 217–256. Academic Press.</div>
+    <div class="ref">© <span class="copy-year">2026</span> Oscar Sanisidro. All rights reserved.</div>
+  </div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three":          "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/":  "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/",
+    "three-mesh-bvh": "https://cdn.jsdelivr.net/npm/three-mesh-bvh@0.7.3/build/index.module.js"
+  }
+}
+</script>
+
+<script type="module">
+/**
+ * Open-access tool for digital retrodeformation of 3D anatomical models.
+ * RetroDeform — An online 3D Retrodeformation Tool
+ * © Oscar Sanisidro. All rights reserved.
+ */
+import * as THREE from 'three';
+import { OrbitControls }   from 'three/addons/controls/OrbitControls.js';
+import { PLYLoader }       from 'three/addons/loaders/PLYLoader.js';
+import { OBJLoader }       from 'three/addons/loaders/OBJLoader.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import {
+  acceleratedRaycast,
+  computeBoundsTree,
+  disposeBoundsTree,
+} from 'three-mesh-bvh';
+
+THREE.BufferGeometry.prototype.computeBoundsTree = computeBoundsTree;
+THREE.BufferGeometry.prototype.disposeBoundsTree = disposeBoundsTree;
+THREE.Mesh.prototype.raycast = acceleratedRaycast;
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  TPS ALGORITHM — pure JavaScript (Schlager et al. 2018)
+// ══════════════════════════════════════════════════════════════════════════════
+
+function tpsKernel(r2)   { return r2 > 0 ? r2 * Math.log(r2) : 0; }
+
+function findSymmetryPlane(lm, pairedLm) {
+  const P = pairedLm.length;
+  let nx=0, ny=0, nz=0, cx=0, cy=0, cz=0;
+  for (const [ri, li] of pairedLm) {
+    const [rx,ry,rz] = lm[ri], [lx,ly,lz] = lm[li];
+    cx += (rx+lx)/2; cy += (ry+ly)/2; cz += (rz+lz)/2;
+    const dx=rx-lx, dy=ry-ly, dz=rz-lz;
+    const n = Math.sqrt(dx*dx+dy*dy+dz*dz)+1e-12;
+    nx+=dx/n; ny+=dy/n; nz+=dz/n;
+  }
+  cx/=P; cy/=P; cz/=P;
+  const nl = Math.sqrt(nx*nx+ny*ny+nz*nz)+1e-12;
+  return { normal:[nx/nl,ny/nl,nz/nl], centroid:[cx,cy,cz] };
+}
+
+function reflectPoint(px,py,pz, nx,ny,nz, cx,cy,cz) {
+  const p = (px-cx)*nx + (py-cy)*ny + (pz-cz)*nz;
+  return [px-2*p*nx, py-2*p*ny, pz-2*p*nz];
+}
+
+function symmetrize(lm, pairedLm) {
+  const { normal:[nx,ny,nz], centroid:[cx,cy,cz] } = findSymmetryPlane(lm, pairedLm);
+  const sym = lm.map(p=>[...p]);
+  for (const [ri, li] of pairedLm) {
+    const [rx,ry,rz]=lm[ri], [lx,ly,lz]=lm[li];
+    const [mlx,mly,mlz] = reflectPoint(lx,ly,lz, nx,ny,nz, cx,cy,cz);
+    const srx=(rx+mlx)/2, sry=(ry+mly)/2, srz=(rz+mlz)/2;
+    const [slx,sly,slz] = reflectPoint(srx,sry,srz, nx,ny,nz, cx,cy,cz);
+    sym[ri]=[srx,sry,srz]; sym[li]=[slx,sly,slz];
+  }
+  return sym;
+}
+
+function solveSystem(A, B) {
+  const n=A.length, m=B[0].length;
+  const M=A.map(r=>[...r]), R=B.map(r=>[...r]);
+  for (let col=0; col<n; col++) {
+    let maxR=col, maxV=Math.abs(M[col][col]);
+    for (let row=col+1; row<n; row++) if (Math.abs(M[row][col])>maxV) { maxV=Math.abs(M[row][col]); maxR=row; }
+    if (maxR!==col) { [M[col],M[maxR]]=[M[maxR],M[col]]; [R[col],R[maxR]]=[R[maxR],R[col]]; }
+    if (Math.abs(M[col][col])<1e-14) continue;
+    for (let row=0; row<n; row++) {
+      if (row===col) continue;
+      const f=M[row][col]/M[col][col];
+      for (let k=col; k<n; k++) M[row][k]-=f*M[col][k];
+      for (let k=0;   k<m; k++) R[row][k]-=f*R[col][k];
+    }
+  }
+  return R.map((row,i)=>row.map(v=>v/(M[i][i]||1e-14)));
+}
+
+// Works in 2D (landmarks [x,y]) or 3D (landmarks [x,y,z]).
+function tpsCoefficients(fromLm, toLm, alpha=1e-5) {
+  const N=fromLm.length, d=fromLm[0].length, sz=N+d+1;
+  const L=Array.from({length:sz},()=>new Array(sz).fill(0));
+  for (let i=0; i<N; i++) {
+    for (let j=0; j<N; j++) {
+      let r2=0; for (let k=0;k<d;k++){ const t=fromLm[i][k]-fromLm[j][k]; r2+=t*t; }
+      L[i][j]=tpsKernel(r2)+(i===j?alpha:0);
+    }
+    L[i][N]=L[N][i]=1;
+    for (let k=0;k<d;k++) L[i][N+1+k]=L[N+1+k][i]=fromLm[i][k];
+  }
+  const RHS=[...toLm.map(p=>[...p])];
+  for (let k=0;k<=d;k++) RHS.push(new Array(d).fill(0));
+  const X=solveSystem(L,RHS);
+  return { W:X.slice(0,N), A:X.slice(N) };
+}
+
+function tpsApplyToBuffer(posArr, fromLm, W, A) {
+  if (fromLm[0].length===2) return tpsApplyToBuffer2D(posArr, fromLm, W, A);
+  const V=posArr.length/3, N=fromLm.length;
+  const out=new Float32Array(V*3);
+  const flx=new Float64Array(N), fly=new Float64Array(N), flz=new Float64Array(N);
+  const wx=new Float64Array(N),  wy=new Float64Array(N),  wz=new Float64Array(N);
+  for (let j=0;j<N;j++) { flx[j]=fromLm[j][0]; fly[j]=fromLm[j][1]; flz[j]=fromLm[j][2]; wx[j]=W[j][0]; wy[j]=W[j][1]; wz[j]=W[j][2]; }
+  const [a0x,a0y,a0z]=A[0],[a1x,a1y,a1z]=A[1],[a2x,a2y,a2z]=A[2],[a3x,a3y,a3z]=A[3];
+  for (let i=0; i<V; i++) {
+    const qx=posArr[i*3], qy=posArr[i*3+1], qz=posArr[i*3+2];
+    let rx=a0x+a1x*qx+a2x*qy+a3x*qz, ry=a0y+a1y*qx+a2y*qy+a3y*qz, rz=a0z+a1z*qx+a2z*qy+a3z*qz;
+    for (let j=0; j<N; j++) {
+      const dx=qx-flx[j],dy=qy-fly[j],dz=qz-flz[j];
+      const r2=dx*dx+dy*dy+dz*dz, u=r2>0?r2*Math.log(r2):0;
+      rx+=wx[j]*u; ry+=wy[j]*u; rz+=wz[j]*u;
+    }
+    out[i*3]=rx; out[i*3+1]=ry; out[i*3+2]=rz;
+  }
+  return out;
+}
+
+// 2D TPS on a stride-3 buffer (x,y used; z copied through).
+function tpsApplyToBuffer2D(posArr, fromLm, W, A) {
+  const V=posArr.length/3, N=fromLm.length;
+  const out=new Float32Array(V*3);
+  const flx=new Float64Array(N), fly=new Float64Array(N), wx=new Float64Array(N), wy=new Float64Array(N);
+  for (let j=0;j<N;j++){ flx[j]=fromLm[j][0]; fly[j]=fromLm[j][1]; wx[j]=W[j][0]; wy[j]=W[j][1]; }
+  const [a0x,a0y]=A[0],[a1x,a1y]=A[1],[a2x,a2y]=A[2];
+  for (let i=0;i<V;i++){
+    const qx=posArr[i*3], qy=posArr[i*3+1];
+    let rx=a0x+a1x*qx+a2x*qy, ry=a0y+a1y*qx+a2y*qy;
+    for (let j=0;j<N;j++){
+      const dx=qx-flx[j], dy=qy-fly[j], r2=dx*dx+dy*dy, u=r2>0?r2*Math.log(r2):0;
+      rx+=wx[j]*u; ry+=wy[j]*u;
+    }
+    out[i*3]=rx; out[i*3+1]=ry; out[i*3+2]=posArr[i*3+2];
+  }
+  return out;
+}
+
+// In 2D mode the landmarks are handled as [x,y]; in 3D as [x,y,z].
+function toDim(lm){ return state.is2D ? lm.map(p=>[p[0],p[1]]) : lm; }
+
+function retrodeformJS(posArr, lm, pairedLm, alpha) {
+  const symLm=symmetrize(lm, pairedLm);
+  const from=toDim(lm), to=toDim(symLm);
+  const {W,A}=tpsCoefficients(from, to, alpha);
+  return tpsApplyToBuffer(posArr, from, W, A);
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  Sagittal surface — backward TPS (symLm → lm) applied to a flat grid.
+//
+//  Key idea: the "true" sagittal plane is FLAT in the bilaterally symmetric
+//  (retrodeformed) configuration.  Mapping it BACK to the deformed specimen
+//  with the inverse TPS produces a curved, wrinkled surface that follows the
+//  actual taphonomic deformation of the specimen.
+// ══════════════════════════════════════════════════════════════════════════════
+function buildSagittalSurface(segs) {
+  const pairs = getPairedLM();
+  if (!state.meshBBox || pairs.length < 1) return null;
+
+  const lm    = state.landmarks.map(l => [l.x, l.y, l.z]);
+  const alpha = parseFloat(document.getElementById('alpha-input').value) || 1e-5;
+
+  const symLm = symmetrize(lm, pairs);
+  const { W, A } = tpsCoefficients(toDim(symLm), toDim(lm), alpha);
+  const { normal, centroid } = findSymmetryPlane(lm, pairs);
+  const [cx,cy,cz] = centroid;
+
+  if (state.is2D) {
+    // 2D: the symmetry "plane" is a midline in the image plane.
+    let dx=-normal[1], dy=normal[0]; const dl=Math.hypot(dx,dy)||1; dx/=dl; dy/=dl;
+    const ms2=new THREE.Vector3(); state.meshBBox.getSize(ms2);
+    const half2=Math.max(ms2.x,ms2.y)*0.75, n=segs*4;
+    const pts=new Float32Array((n+1)*3);
+    for (let i=0;i<=n;i++){ const t=-half2+2*half2*(i/n); pts[i*3]=cx+t*dx; pts[i*3+1]=cy+t*dy; pts[i*3+2]=0; }
+    const wp=tpsApplyToBuffer(pts, toDim(symLm), W, A);
+    const zOff=Math.max(ms2.x,ms2.y)*0.002, lp=[];
+    for (let i=0;i<n;i++) lp.push(wp[i*3],wp[i*3+1],zOff, wp[i*3+3],wp[i*3+4],zOff);
+    return { positions:new Float32Array(0), tris:[], linePos:new Float32Array(lp) };
+  }
+  const N  = new THREE.Vector3(...normal).normalize();
+  const up = Math.abs(N.y) < 0.9 ? new THREE.Vector3(0,1,0) : new THREE.Vector3(1,0,0);
+  const e1 = new THREE.Vector3().crossVectors(up, N).normalize();
+  const e2 = new THREE.Vector3().crossVectors(N, e1).normalize();
+
+  const ms = new THREE.Vector3(); state.meshBBox.getSize(ms);
+  const half = Math.max(ms.x, ms.y, ms.z) * 0.58;
+
+  const nv = (segs+1)*(segs+1);
+  const flat = new Float32Array(nv*3);
+  let idx = 0;
+  for (let vi = 0; vi <= segs; vi++) {
+    const v = -half + 2*half*(vi/segs);
+    for (let ui = 0; ui <= segs; ui++) {
+      const u = -half + 2*half*(ui/segs);
+      flat[idx++] = cx + u*e1.x + v*e2.x;
+      flat[idx++] = cy + u*e1.y + v*e2.y;
+      flat[idx++] = cz + u*e1.z + v*e2.z;
+    }
+  }
+
+  const positions = tpsApplyToBuffer(flat, symLm, W, A);
+  const tris = [];
+  for (let vi = 0; vi < segs; vi++)
+    for (let ui = 0; ui < segs; ui++) {
+      const a=vi*(segs+1)+ui, b=a+1, c=a+(segs+1), d=c+1;
+      tris.push(a,b,d, a,d,c);
+    }
+
+  const linePos = [];
+  for (let vi = 0; vi <= segs; vi++)
+    for (let ui = 0; ui < segs; ui++) {
+      const a=(vi*(segs+1)+ui)*3, b=a+3;
+      linePos.push(positions[a],positions[a+1],positions[a+2],
+                   positions[b],positions[b+1],positions[b+2]);
+    }
+  for (let ui = 0; ui <= segs; ui++)
+    for (let vi = 0; vi < segs; vi++) {
+      const a=(vi*(segs+1)+ui)*3, b=a+(segs+1)*3;
+      linePos.push(positions[a],positions[a+1],positions[a+2],
+                   positions[b],positions[b+1],positions[b+2]);
+    }
+
+  return { positions, tris, linePos: new Float32Array(linePos) };
+}
+
+function generatePLY(vertices, indexArray, stemName) {
+  const V=vertices.length/3, F=indexArray.length/3;
+  const header=`ply\nformat binary_little_endian 1.0\nelement vertex ${V}\nproperty float x\nproperty float y\nproperty float z\nelement face ${F}\nproperty list uchar int vertex_indices\nend_header\n`;
+  const hBytes=new TextEncoder().encode(header);
+  const buf=new ArrayBuffer(hBytes.length+V*12+F*13);
+  const u8=new Uint8Array(buf), dv=new DataView(buf);
+  u8.set(hBytes,0); let off=hBytes.length;
+  for (let i=0;i<V;i++) { dv.setFloat32(off,vertices[i*3],true);off+=4; dv.setFloat32(off,vertices[i*3+1],true);off+=4; dv.setFloat32(off,vertices[i*3+2],true);off+=4; }
+  for (let i=0;i<F;i++) { dv.setUint8(off,3);off+=1; dv.setInt32(off,indexArray[i*3],true);off+=4; dv.setInt32(off,indexArray[i*3+1],true);off+=4; dv.setInt32(off,indexArray[i*3+2],true);off+=4; }
+  const blob=new Blob([buf],{type:'application/octet-stream'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a'); a.href=url; a.download=`${stemName}_retrodeformed.ply`; a.click();
+  setTimeout(()=>URL.revokeObjectURL(url),5000);
+}
+
+const state = {
+  meshLoaded:false, mode:'navigate',
+  landmarks:[], nextSide:'right',
+  retrodeformed:false, showingRetro:false,
+  origVerts:null, deformVerts:null,
+  meshBBox:null, stemName:'model',
+  scalePts:[], scaleDist:0,
+  is2D:false, image2D:null, meshCenter:null,
+};
+
+const canvas   = document.getElementById('canvas');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias:true });
+renderer.setPixelRatio(window.devicePixelRatio);
+
+const scene    = new THREE.Scene();
+scene.background = new THREE.Color(0x0a0c12);
+
+const perspCamera = new THREE.PerspectiveCamera(45, 1, 0.001, 100000);
+perspCamera.position.set(0, 0, 200);
+const orthoCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.001, 100000);
+let camera = perspCamera;
+let useOrtho = false;
+
+const controls = new OrbitControls(perspCamera, renderer.domElement);
+controls.enableDamping=true; controls.dampingFactor=0.06; controls.screenSpacePanning=true;
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+const dir1=new THREE.DirectionalLight(0xffffff, 1.20); dir1.position.set(1,1.5,1);   scene.add(dir1);
+const dir2=new THREE.DirectionalLight(0xdde8ff, 0.50); dir2.position.set(-1,-0.5,-0.8); scene.add(dir2);
+const dir3=new THREE.DirectionalLight(0xffffff, 0.40); dir3.position.set(0,1,-1);    scene.add(dir3);
+const dir4=new THREE.DirectionalLight(0xfff5e0, 0.30); dir4.position.set(0.5,-1,0.5); scene.add(dir4);
+
+const raycaster=new THREE.Raycaster(); raycaster.firstHitOnly=true;
+
+let meshObject=null, meshGeom=null, axesHelper=null;
+const lmGroup=new THREE.Group(); let lmSpheres=[];
+scene.add(lmGroup);
+const scaleGroup=new THREE.Group();
+scene.add(scaleGroup);
+
+let symPlaneMesh=null, symPlaneGrid=null, symPlaneVisible=false;
+
+(function animate(){ requestAnimationFrame(animate); controls.update(); renderer.render(scene,camera); })();
+onResize();
+
+function onResize(){
+  const w=canvas.parentElement.clientWidth, h=canvas.parentElement.clientHeight;
+  renderer.setSize(w,h,false);
+  perspCamera.aspect=w/h; perspCamera.updateProjectionMatrix();
+  if(useOrtho){
+    const aspect=w/h, frustH=orthoCamera.top-orthoCamera.bottom;
+    orthoCamera.left=-frustH*aspect/2; orthoCamera.right=frustH*aspect/2;
+    orthoCamera.updateProjectionMatrix();
+  }
+}
+window.addEventListener('resize', onResize);
+
+async function handleFile(file) {
+  const ext=file.name.split('.').pop().toLowerCase();
+  if (['png','jpg','jpeg','webp','bmp'].includes(ext)) { return handleImage(file); }
+  if (['tif','tiff'].includes(ext)) { setStatus('TIFF cannot be read by browsers — please convert it to PNG.','err'); return; }
+  if (!['ply','obj'].includes(ext)) { setStatus('Supported files: OBJ, PLY (3D) · PNG, JPG (2D).','err'); return; }
+  setStatus('Reading file…','busy'); showProgress(0.15);
+  document.getElementById('upload-hint').style.display='none';
+  try {
+    const buf=await file.arrayBuffer(); showProgress(0.5);
+    let geometry;
+    if (ext==='ply') {
+      geometry=new PLYLoader().parse(buf);
+    } else {
+      const group=new OBJLoader().parse(new TextDecoder().decode(buf));
+      const geos=[]; group.traverse(c=>{ if(c.isMesh) geos.push(c.geometry); });
+      geometry=geos.length===1?geos[0]:mergeGeometries(geos,false);
+    }
+    showProgress(0.75); setStatus('Building BVH…','busy');
+    setupMesh(geometry, file.name);
+    showProgress(1.0); hideProgress();
+  } catch(e) { setStatus('Error loading model: '+e.message,'err'); hideProgress(); console.error(e); }
+}
+
+// 2D: the image becomes a finely subdivided plane in pixel units (centred),
+// so landmarking, symmetrization and TPS reuse the same machinery as 3D.
+async function handleImage(file) {
+  setStatus('Reading image…','busy'); showProgress(0.2);
+  document.getElementById('upload-hint').style.display='none';
+  try {
+    const url=URL.createObjectURL(file);
+    const img=new Image(); img.src=url; await img.decode();
+    const W=img.naturalWidth, H=img.naturalHeight;
+    const tex=new THREE.Texture(img);
+    tex.colorSpace=THREE.SRGBColorSpace;
+    tex.anisotropy=renderer.capabilities.getMaxAnisotropy();
+    tex.needsUpdate=true;
+    const segL=256, segX=W>=H?segL:Math.max(8,Math.round(segL*W/H)), segY=H>=W?segL:Math.max(8,Math.round(segL*H/W));
+    const geometry=new THREE.PlaneGeometry(W,H,segX,segY);
+    if (state.image2D?.url) URL.revokeObjectURL(state.image2D.url);
+    state.image2D={img,W,H,url};
+    showProgress(0.7);
+    setupMesh(geometry, file.name, tex);
+    showProgress(1.0); hideProgress();
+  } catch(e) { setStatus('Error loading image: '+e.message,'err'); hideProgress(); console.error(e); }
+}
+
+function setupMesh(geometry, filename, texture=null) {
+  if (meshObject) { scene.remove(meshObject); meshObject.material.map?.dispose(); meshObject.material.dispose(); meshObject.geometry.disposeBoundsTree(); meshObject.geometry.dispose(); meshObject=null; }
+  state.is2D=!!texture;
+  if (!state.is2D) state.image2D=null;
+  if (symPlaneMesh) { scene.remove(symPlaneMesh); symPlaneMesh.geometry.dispose(); symPlaneMesh.material.dispose(); symPlaneMesh=null; }
+  if (symPlaneGrid) { scene.remove(symPlaneGrid); symPlaneGrid.geometry.dispose(); symPlaneGrid.material.dispose(); symPlaneGrid=null; }
+  lmGroup.clear(); lmSpheres=[];
+  scaleGroup.clear(); scaleVisible=false;
+  Object.assign(state,{landmarks:[],nextSide:'right',retrodeformed:false,showingRetro:false,deformVerts:null,scalePts:[],scaleDist:0});
+  state.stemName=filename.replace(/\.[^.]+$/,''); state.imageFile=filename;
+
+  if (!geometry.index) {
+    const n=geometry.attributes.position.count, idx=new Uint32Array(n);
+    for(let i=0;i<n;i++) idx[i]=i;
+    geometry.setIndex(new THREE.BufferAttribute(idx,1));
+  }
+  geometry.computeVertexNormals();
+  geometry.computeBoundingBox();
+  const center=new THREE.Vector3(); geometry.boundingBox.getCenter(center);
+  geometry.translate(-center.x,-center.y,-center.z);
+  state.meshCenter=state.is2D
+    ? new THREE.Vector3(state.image2D.W/2, state.image2D.H/2, 0)   // pixel frame, origin bottom-left (tpsDig)
+    : center.clone();                                             // original model frame
+  geometry.computeBoundingBox();
+  state.meshBBox=geometry.boundingBox.clone();
+  state.origVerts=geometry.attributes.position.array.slice();
+
+  geometry.computeBoundsTree({maxLeafTris:5});
+  const mat=state.is2D
+    ? new THREE.MeshBasicMaterial({map:texture, side:THREE.DoubleSide})
+    : new THREE.MeshPhongMaterial({color:0xb8b0a4,specular:0x444444,shininess:18,side:THREE.DoubleSide});
+  meshObject=new THREE.Mesh(geometry, mat);
+  meshGeom=geometry; scene.add(meshObject);
+
+  const size=new THREE.Vector3(); state.meshBBox.getSize(size);
+  const maxDim=Math.max(size.x,size.y,size.z);
+  if(useOrtho){ useOrtho=false; camera=perspCamera; controls.object=perspCamera; const _bo=document.getElementById('btn-ortho'); _bo.classList.remove('active'); _bo.textContent='Ortho'; }
+  perspCamera.position.set(0,0,maxDim*2); perspCamera.near=maxDim*0.001; perspCamera.far=maxDim*20;
+  perspCamera.updateProjectionMatrix(); controls.target.set(0,0,0); controls.update();
+
+  if (axesHelper) scene.remove(axesHelper);
+  axesHelper=new THREE.AxesHelper(maxDim*0.3); axesHelper.visible=!state.is2D; scene.add(axesHelper);
+
+  // 2D: flat view only (orthographic, no rotation)
+  controls.enableRotate=!state.is2D;
+  if (state.is2D && !useOrtho) toggleOrtho();
+  document.getElementById('btn-ortho').style.display=state.is2D?'none':'';
+  document.getElementById('btn-download-label').textContent=state.is2D?'⬇ Download retrodeformed PNG':'⬇ Download retrodeformed PLY';
+  document.getElementById('btn-toggle-plane').innerHTML=state.is2D?'◈ Midline':'◈ Sagittal plane';
+
+  const vc=geometry.attributes.position.count, fc=geometry.index.count/3;
+  document.getElementById('mesh-info').innerHTML=state.is2D
+    ? `<span>2D image</span> &nbsp;·&nbsp; <span>${state.image2D.W} × ${state.image2D.H}</span> px`
+    : `<span>${vc.toLocaleString()}</span> vertices &nbsp;·&nbsp; <span>${Math.round(fc).toLocaleString()}</span> faces`;
+  document.getElementById('btn-landmarks').disabled=false;
+  document.getElementById('btn-add-pair').disabled=false;
+  document.getElementById('btn-clear-lm').disabled=false;
+  state.meshLoaded=true;
+  updateModeHint(); updateLandmarkUI(); updateRetrodefButton();
+  setStatus(`Model loaded: ${filename}`,'ok'); setViewUI(false); updateViewerGuide();
+}
+
+function getLandmarkRadius() {
+  const s=new THREE.Vector3(); state.meshBBox.getSize(s);
+  return Math.max(s.x,s.y,s.z)*0.012;
+}
+function addLandmark(point) {
+  const side=state.nextSide;
+  state.landmarks.push({x:point.x,y:point.y,z:state.is2D?0:point.z,side});
+  state.nextSide=side==='right'?'left':'right';
+  const r=getLandmarkRadius(), color=side==='right'?0xff5555:0x5599ff;
+  const sphere=new THREE.Mesh(
+    new THREE.SphereGeometry(r,10,8),
+    new THREE.MeshPhongMaterial({color,emissive:color,emissiveIntensity:0.3})
+  );
+  sphere.position.copy(point); sphere.userData.lmIndex=state.landmarks.length-1;
+  lmGroup.add(sphere); lmSpheres.push({mesh:sphere,lmIndex:state.landmarks.length-1});
+  updateLandmarkUI(); updateRetrodefButton(); updateSymmetryPlane(); updateViewerGuide();
+  state.retrodeformed=false; setViewUI(false);
+}
+function removeLandmark(idx) {
+  const ps=idx%2===0?idx:idx-1;
+  const toRemove=[ps,ps+1].filter(i=>i<state.landmarks.length);
+  for (let i=toRemove.length-1;i>=0;i--) {
+    const li=toRemove[i]; state.landmarks.splice(li,1);
+    const si=lmSpheres.findIndex(s=>s.lmIndex===li);
+    if (si>=0) { lmGroup.remove(lmSpheres[si].mesh); lmSpheres.splice(si,1); }
+  }
+  rebuildLandmarkSpheres();
+  state.nextSide=(state.landmarks.length%2===0)?'right':'left';
+  updateLandmarkUI(); updateRetrodefButton(); updateSymmetryPlane(); updateViewerGuide();
+  state.retrodeformed=false; setViewUI(false);
+}
+function rebuildLandmarkSpheres() {
+  lmGroup.clear(); lmSpheres=[];
+  const r=getLandmarkRadius();
+  state.landmarks.forEach((lm,i)=>{
+    const color=lm.side==='right'?0xff5555:0x5599ff;
+    const sphere=new THREE.Mesh(new THREE.SphereGeometry(r,10,8),new THREE.MeshPhongMaterial({color,emissive:color,emissiveIntensity:0.3}));
+    sphere.position.set(lm.x,lm.y,lm.z); sphere.userData.lmIndex=i;
+    lmGroup.add(sphere); lmSpheres.push({mesh:sphere,lmIndex:i});
+  });
+  updateSymmetryPlane();
+}
+function clearLandmarks() {
+  state.landmarks=[]; state.nextSide='right'; lmGroup.clear(); lmSpheres=[];
+  state.retrodeformed=false; updateLandmarkUI(); updateRetrodefButton(); setViewUI(false);
+  updateSymmetryPlane(); updateViewerGuide();
+}
+
+function updateSymmetryPlane() {
+  if (symPlaneMesh) { scene.remove(symPlaneMesh); symPlaneMesh.geometry.dispose(); symPlaneMesh.material.dispose(); symPlaneMesh=null; }
+  if (symPlaneGrid) { scene.remove(symPlaneGrid); symPlaneGrid.geometry.dispose(); symPlaneGrid.material.dispose(); symPlaneGrid=null; }
+
+  const pairs=getPairedLM();
+  const btn=document.getElementById('btn-toggle-plane');
+  if (!state.meshBBox || pairs.length<1) { btn.disabled=true; return; }
+  btn.disabled=false;
+
+  const surf=buildSagittalSurface(50);
+  if (!surf) return;
+
+  if (surf.tris.length) {
+    const geom=new THREE.BufferGeometry();
+    geom.setAttribute('position', new THREE.BufferAttribute(surf.positions,3));
+    geom.setIndex(surf.tris);
+    geom.computeVertexNormals();
+    const fillMat=new THREE.MeshBasicMaterial({ color:0x5599ff, transparent:true, opacity:0.14, side:THREE.DoubleSide, depthWrite:false });
+    symPlaneMesh=new THREE.Mesh(geom, fillMat);
+    symPlaneMesh.visible=symPlaneVisible;
+    scene.add(symPlaneMesh);
+  }
+
+  const lineGeom=new THREE.BufferGeometry();
+  lineGeom.setAttribute('position', new THREE.BufferAttribute(surf.linePos,3));
+  const lineMat=state.is2D
+    ? new THREE.LineBasicMaterial({ color:0x00e5ff, transparent:true, opacity:0.9, depthTest:false })
+    : new THREE.LineBasicMaterial({ color:0x7ab4ff, transparent:true, opacity:0.35 });
+  symPlaneGrid=new THREE.LineSegments(lineGeom, lineMat);
+  symPlaneGrid.visible=symPlaneVisible;
+  scene.add(symPlaneGrid);
+}
+
+function toggleSymPlane() {
+  symPlaneVisible=!symPlaneVisible;
+  if (symPlaneMesh) symPlaneMesh.visible=symPlaneVisible;
+  if (symPlaneGrid) symPlaneGrid.visible=symPlaneVisible;
+  document.getElementById('btn-toggle-plane').classList.toggle('active', symPlaneVisible);
+}
+function toggleOrtho() {
+  useOrtho=!useOrtho;
+  if(useOrtho){
+    const dist=perspCamera.position.distanceTo(controls.target);
+    const aspect=canvas.parentElement.clientWidth/canvas.parentElement.clientHeight;
+    const frustH=2*dist*Math.tan(THREE.MathUtils.degToRad(perspCamera.fov/2));
+    orthoCamera.left=-frustH*aspect/2; orthoCamera.right=frustH*aspect/2;
+    orthoCamera.top=frustH/2; orthoCamera.bottom=-frustH/2;
+    orthoCamera.near=perspCamera.near; orthoCamera.far=perspCamera.far;
+    orthoCamera.position.copy(perspCamera.position);
+    orthoCamera.quaternion.copy(perspCamera.quaternion);
+    orthoCamera.updateProjectionMatrix();
+    camera=orthoCamera;
+  } else {
+    perspCamera.position.copy(orthoCamera.position);
+    perspCamera.quaternion.copy(orthoCamera.quaternion);
+    perspCamera.updateProjectionMatrix();
+    camera=perspCamera;
+  }
+  controls.object=camera; controls.update();
+  const btnOrtho=document.getElementById('btn-ortho');
+  btnOrtho.classList.toggle('active',useOrtho);
+  btnOrtho.textContent=useOrtho?'Persp':'Ortho';
+}
+function getPairedLM() {
+  const pairs=[], n=Math.floor(state.landmarks.length/2);
+  for(let i=0;i<n;i++) pairs.push([2*i,2*i+1]);
+  return pairs;
+}
+
+function buildScaleLine(){
+  scaleGroup.clear();
+  if(state.scalePts.length<2) return;
+  const p1=state.scalePts[0], p2=state.scalePts[1];
+  const dx=p1.x-p2.x, dy=p1.y-p2.y, dz=p1.z-p2.z;
+  state.scaleDist=Math.sqrt(dx*dx+dy*dy+dz*dz);
+  const r=getLandmarkRadius();
+  [p1,p2].forEach(p=>{
+    const s=new THREE.Mesh(
+      new THREE.SphereGeometry(r,10,8),
+      new THREE.MeshPhongMaterial({color:0xffffff, emissive:0xffffff, emissiveIntensity:0.3})
+    );
+    s.position.copy(p); scaleGroup.add(s);
+  });
+  scaleVisible=true; scaleGroup.visible=true;
+  const toggleBtn=document.getElementById('btn-toggle-scale');
+  if(toggleBtn){ toggleBtn.disabled=false; toggleBtn.classList.add('active'); }
+  updateScaleHint();
+  updateMmScale();
+}
+
+function resetScalePts(){
+  state.scalePts=[]; state.scaleDist=0;
+  scaleGroup.clear(); scaleVisible=false;
+  const toggleBtn=document.getElementById('btn-toggle-scale');
+  if(toggleBtn){ toggleBtn.disabled=true; toggleBtn.classList.remove('active'); }
+  updateScaleHint();
+  updateMmScale();
+}
+
+function updateScaleHint(){
+  const el=document.getElementById('scale-dist-hint');
+  if(!el) return;
+  if(state.scalePts.length===0){
+    el.textContent='Draw a scale bar on the mesh first.';
+  } else if(state.scalePts.length===1){
+    el.textContent='Point 1 set — click the second point on the mesh.';
+  } else {
+    el.textContent=`${state.is2D?'Image':'Mesh'} dist: ${state.scaleDist.toFixed(3)}${unitLbl()}`;
+  }
+}
+
+async function runRetrodef() {
+  const pairs=getPairedLM();
+  if (pairs.length<2) { setStatus('You need ≥ 2 landmark pairs.','warn'); return; }
+  const alpha=parseFloat(document.getElementById('alpha-input').value)||1e-5;
+  const lm=state.landmarks.map(l=>[l.x,l.y,l.z]);
+  setStatus('Computing retrodeformation…','busy');
+  document.getElementById('btn-retrodeform').disabled=true;
+  showProgress(0.2);
+  await new Promise(r=>setTimeout(r,0));
+  try {
+    showProgress(0.5);
+    const deformed=retrodeformJS(state.origVerts, lm, pairs, alpha);
+    state.deformVerts=deformed; state.retrodeformed=true;
+    showProgress(1.0); hideProgress();
+    document.getElementById('btn-retrodeform').disabled=false;
+    setStatus('Retrodeformation complete!','ok');
+    switchView(true); setViewUI(true); updateDispLegend(); updateViewerGuide();
+  } catch(e) {
+    setStatus('Error: '+e.message,'err');
+    document.getElementById('btn-retrodeform').disabled=false;
+    hideProgress(); console.error(e);
+  }
+}
+
+function switchView(showRetro) {
+  if (!meshGeom||!state.origVerts) return;
+  state.showingRetro=showRetro;
+  const pos=meshGeom.attributes.position;
+  if (showRetro&&state.deformVerts) {
+    pos.array.set(state.deformVerts); applyDisplacementColors();
+  } else {
+    pos.array.set(state.origVerts);
+    meshObject.material.vertexColors=false; meshObject.material.color.set(state.is2D?0xffffff:0xb8b0a4); meshObject.material.needsUpdate=true;
+    if (meshGeom.attributes.color) meshGeom.deleteAttribute('color');
+  }
+  pos.needsUpdate=true; meshGeom.computeVertexNormals(); meshGeom.computeBoundingSphere();
+  meshGeom.computeBoundsTree({maxLeafTris:5});
+  syncViewButtons(showRetro); updateViewerGuide();
+}
+function applyDisplacementColors() {
+  const orig=state.origVerts,def=state.deformVerts,n=orig.length/3;
+  const disps=new Float32Array(n); let maxD=0, sumD=0;
+  for(let i=0;i<n;i++){const dx=def[i*3]-orig[i*3],dy=def[i*3+1]-orig[i*3+1],dz=def[i*3+2]-orig[i*3+2];disps[i]=Math.sqrt(dx*dx+dy*dy+dz*dz);if(disps[i]>maxD)maxD=disps[i];sumD+=disps[i];}
+  state._maxDisp=maxD; state._meanDisp=sumD/n; state._disps=disps;
+  if (state.is2D) {   // keep the photo visible; report displacement stats only
+    document.getElementById('mm-scale-box').style.display='block';
+    updateScaleHint(); updateMmScale(); return;
+  }
+  const colors=new Float32Array(n*3);
+  for(let i=0;i<n;i++){const[r,g,b]=dispColorRamp(maxD>0?disps[i]/maxD:0);colors[i*3]=r;colors[i*3+1]=g;colors[i*3+2]=b;}
+  meshGeom.setAttribute('color',new THREE.BufferAttribute(colors,3));
+  meshObject.material.vertexColors=true; meshObject.material.color.set(0xffffff); meshObject.material.needsUpdate=true;
+  document.getElementById('mm-scale-box').style.display='block';
+  updateScaleHint();
+  updateMmScale();
+}
+function dispColorRamp(t){
+  if(t<0.33){const s=t/0.33;return[s*0.27,0.53+s*0.47,1.0-s*0.47];}
+  if(t<0.66){const s=(t-0.33)/0.33;return[s,1.0,0.53-s*0.53];}
+  const s=(t-0.66)/0.34;return[1.0,1.0-s,0.0];
+}
+function updateDispLegend(){
+  const d=document.getElementById('disp-legend');
+  if(state.retrodeformed&&state._maxDisp!==undefined){
+    d.classList.add('visible');
+    document.getElementById('legend-max').textContent=state._maxDisp.toFixed(2)+unitLbl();
+    d.querySelector('.legend-bar').style.display=state.is2D?'none':'';
+    d.querySelector('.legend-labels').style.display=state.is2D?'none':'';
+    document.getElementById('disp-title').textContent=state.is2D?'Pixel displacement:':'Vertex displacement:';
+  } else {
+    d.classList.remove('visible');
+    document.getElementById('disp-stats').style.display='none';
+    document.getElementById('mm-scale-box').style.display='none';
+  }
+}
+
+function unitLbl(){ return state.is2D?' px':' u'; }
+
+function updateMmScale(){
+  if(!state.retrodeformed||state._maxDisp===undefined) return;
+  const realMm=parseFloat(document.getElementById('mm-dist-input').value);
+  const meshDist=state.scaleDist;
+  const statsEl=document.getElementById('disp-stats');
+  const hintEl=document.getElementById('mm-scale-hint');
+  const legendMaxEl=document.getElementById('legend-max');
+  const meanEl=document.getElementById('disp-mean');
+  const maxEl=document.getElementById('disp-max-val');
+  if(isNaN(realMm)||realMm<=0||meshDist<=0){
+    legendMaxEl.textContent=state._maxDisp.toFixed(2)+unitLbl();
+    statsEl.style.display='block';
+    meanEl.textContent=state._meanDisp.toFixed(2)+unitLbl();
+    maxEl.textContent=state._maxDisp.toFixed(2)+unitLbl();
+    hintEl.textContent=meshDist<=0?'Draw a scale bar on the mesh to enable mm conversion.':'Enter the real distance (mm) of the scale bar.';
+    hintEl.style.color='var(--text2)';
+    return;
+  }
+  const sf=realMm/meshDist;
+  legendMaxEl.textContent=(state._maxDisp*sf).toFixed(2)+' mm';
+  statsEl.style.display='block';
+  meanEl.textContent=(state._meanDisp*sf).toFixed(2)+' mm';
+  maxEl.textContent=(state._maxDisp*sf).toFixed(2)+' mm';
+  hintEl.textContent=`Scale: 1${unitLbl()} = ${sf.toFixed(4)} mm`;
+  hintEl.style.color='var(--text2)';
+}
+
+// ── TPS landmark export ─────────────────────────────────────────────────────
+// Exports only complete Right/Left pairs (the landmarks actually used),
+// in alternating order R1, L1, R2, L2 … and in the coordinate frame of the
+// original input file (the viewer centres the mesh; that offset is undone).
+function exportTPS(symmetrized){
+  const pairs=getPairedLM();
+  if(!state.meshLoaded||pairs.length<1){ setStatus('Place at least one complete landmark pair first.','warn'); return; }
+  const nUsed=pairs.length*2;
+  let lm=state.landmarks.slice(0,nUsed).map(l=>[l.x,l.y,l.z]);
+  if(symmetrized){
+    if(pairs.length<2){ setStatus('Symmetrized landmarks need ≥ 2 pairs.','warn'); return; }
+    lm=symmetrize(lm, pairs);
+  }
+  const c=state.meshCenter||{x:0,y:0,z:0};
+  const fmt=v=>Number(v).toFixed(6);
+  const alpha=parseFloat(document.getElementById('alpha-input').value)||1e-5;
+  const suffix=symmetrized?'_landmarks_symmetrized':'_landmarks';
+  let out=state.is2D?`LM=${nUsed}\n`:`LM3=${nUsed}\n`;
+  lm.forEach(p=>{ out+=state.is2D
+    ? `${fmt(p[0]+c.x)} ${fmt(p[1]+c.y)}\n`
+    : `${fmt(p[0]+c.x)} ${fmt(p[1]+c.y)} ${fmt(p[2]+c.z)}\n`; });
+  out+=`IMAGE=${state.is2D?(state.imageFile||state.stemName):state.stemName}\n`;
+  out+=`ID=${state.stemName}${suffix}\n`;
+  const realMm=parseFloat(document.getElementById('mm-dist-input').value);
+  if(state.is2D && state.scaleDist>0 && realMm>0) out+=`SCALE=${(realMm/state.scaleDist).toFixed(8)}\n`;
+  out+=`COMMENT=RetroDeform (O. Sanisidro); ${symmetrized?'symmetrized target configuration':'landmarks as placed'}; `+
+       `${pairs.length} bilateral pairs, order R1 L1 R2 L2 ...; TPS alpha=${alpha}; exported ${new Date().toISOString().slice(0,10)}\n`;
+  const blob=new Blob([out],{type:'text/plain'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a'); a.href=url; a.download=`${state.stemName}${suffix}.tps`; a.click();
+  setTimeout(()=>URL.revokeObjectURL(url),5000);
+  setStatus(`Exported ${nUsed} landmarks (${pairs.length} pairs) to TPS.`,'ok');
+}
+
+function downloadMesh(){
+  if(!state.deformVerts||!meshGeom) return;
+  if(state.is2D) { exportWarpedImage(); return; }
+  generatePLY(state.deformVerts, meshGeom.index.array, state.stemName);
+}
+
+// 2D export: inverse mapping. For every output pixel, the backward TPS
+// (symmetric → original) gives the source pixel, sampled bilinearly.
+// The mapping is evaluated on a coarse grid and interpolated (TPS is smooth).
+// Output has the same size and frame as the input image, so the symmetrized
+// TPS landmarks overlay it directly; areas with no source are transparent.
+async function exportWarpedImage(){
+  const pairs=getPairedLM(); if(!state.image2D||pairs.length<2) return;
+  const {img,W,H}=state.image2D;
+  const alpha=parseFloat(document.getElementById('alpha-input').value)||1e-5;
+  const lm=state.landmarks.slice(0,pairs.length*2).map(l=>[l.x,l.y,l.z]);
+  const sym2=toDim(symmetrize(lm,pairs)), lm2=toDim(lm);
+  const {W:Wc,A:Ac}=tpsCoefficients(sym2, lm2, alpha);
+  setStatus('Rendering retrodeformed image…','busy'); showProgress(0.1);
+  document.getElementById('btn-download').disabled=true;
+  await new Promise(r=>setTimeout(r,20));
+  try {
+    const step=4, gw=Math.ceil(W/step)+1, gh=Math.ceil(H/step)+1;
+    const grid=new Float32Array(gw*gh*3);
+    for(let j=0;j<gh;j++) for(let i=0;i<gw;i++){ const k=(j*gw+i)*3; grid[k]=i*step+0.5-W/2; grid[k+1]=H/2-(j*step+0.5); grid[k+2]=0; }
+    const map=tpsApplyToBuffer(grid, sym2, Wc, Ac);
+    showProgress(0.3);
+    const sc=document.createElement('canvas'); sc.width=W; sc.height=H;
+    const sctx=sc.getContext('2d',{willReadFrequently:true}); sctx.drawImage(img,0,0);
+    const src=sctx.getImageData(0,0,W,H).data;
+    const oc=document.createElement('canvas'); oc.width=W; oc.height=H;
+    const octx=oc.getContext('2d'); const outImg=octx.createImageData(W,H), out=outImg.data;
+    for(let py=0;py<H;py++){
+      const gj=Math.min(Math.floor(py/step),gh-2), fy=(py-gj*step)/step;
+      for(let px=0;px<W;px++){
+        const gi=Math.min(Math.floor(px/step),gw-2), fx=(px-gi*step)/step;
+        const k00=(gj*gw+gi)*3, k10=k00+3, k01=k00+gw*3, k11=k01+3;
+        const sx=(1-fy)*((1-fx)*map[k00]+fx*map[k10])+fy*((1-fx)*map[k01]+fx*map[k11]);
+        const sy=(1-fy)*((1-fx)*map[k00+1]+fx*map[k10+1])+fy*((1-fx)*map[k01+1]+fx*map[k11+1]);
+        const u=sx+W/2-0.5, v=H/2-sy-0.5;
+        if(u<-0.5||v<-0.5||u>W-0.5||v>H-0.5) continue;      // outside source → transparent
+        const uc=Math.min(Math.max(u,0),W-1), vc=Math.min(Math.max(v,0),H-1);
+        const x0=Math.min(Math.floor(uc),W-2<0?0:W-2), y0=Math.min(Math.floor(vc),H-2<0?0:H-2);
+        const ax=uc-x0, ay=vc-y0, x1=Math.min(x0+1,W-1), y1=Math.min(y0+1,H-1);
+        const i00=(y0*W+x0)*4, i10=(y0*W+x1)*4, i01=(y1*W+x0)*4, i11=(y1*W+x1)*4, o=(py*W+px)*4;
+        for(let c=0;c<4;c++) out[o+c]=(1-ay)*((1-ax)*src[i00+c]+ax*src[i10+c])+ay*((1-ax)*src[i01+c]+ax*src[i11+c]);
+      }
+      if((py&127)===0){ showProgress(0.3+0.6*py/H); await new Promise(r=>setTimeout(r,0)); }
+    }
+    octx.putImageData(outImg,0,0);
+    const blob=await new Promise(r=>oc.toBlob(r,'image/png'));
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a'); a.href=url; a.download=`${state.stemName}_retrodeformed.png`; a.click();
+    setTimeout(()=>URL.revokeObjectURL(url),5000);
+    setStatus('Retrodeformed image exported.','ok');
+  } catch(e){ setStatus('Error exporting image: '+e.message,'err'); console.error(e); }
+  hideProgress(); document.getElementById('btn-download').disabled=false;
+}
+
+canvas.addEventListener('click', onCanvasClick);
+canvas.addEventListener('mousemove', onCanvasMove);
+const tooltip=document.getElementById('tooltip');
+
+function getNDC(e){
+  const rect=canvas.getBoundingClientRect();
+  return new THREE.Vector2(((e.clientX-rect.left)/rect.width)*2-1,-((e.clientY-rect.top)/rect.height)*2+1);
+}
+function onCanvasClick(e){
+  if(!meshObject) return;
+  if(state.mode==='scale'){
+    raycaster.setFromCamera(getNDC(e),camera);
+    const hits=raycaster.intersectObject(meshObject,false);
+    if(hits.length===0) return;
+    state.scalePts.push(hits[0].point.clone());
+    if(state.scalePts.length>=2){
+      buildScaleLine();
+      setMode('navigate');
+      setStatus('Scale bar placed. Enter real distance (mm) to convert units.','ok');
+    } else {
+      updateScaleHint();
+      setStatus('Point 1 set — click the second point on the mesh.','busy');
+    }
+    return;
+  }
+  if(state.mode!=='landmarks') return;
+  raycaster.setFromCamera(getNDC(e),camera);
+  const sHits=raycaster.intersectObjects(lmSpheres.map(s=>s.mesh),false);
+  if(sHits.length>0){removeLandmark(sHits[0].object.userData.lmIndex);return;}
+  const hits=raycaster.intersectObject(meshObject,false);
+  if(hits.length>0) addLandmark(hits[0].point);
+}
+function onCanvasMove(e){
+  if(!meshObject||(state.mode!=='landmarks'&&state.mode!=='scale')){tooltip.style.display='none';return;}
+  raycaster.setFromCamera(getNDC(e),camera);
+  if(state.mode==='scale'){
+    const hits=raycaster.intersectObject(meshObject,false);
+    if(hits.length>0){
+      tooltip.style.display='block'; tooltip.style.left=(e.clientX+12)+'px'; tooltip.style.top=(e.clientY-20)+'px';
+      tooltip.textContent=state.scalePts.length===0?'Click to set scale bar start':'Click to set scale bar end';
+    } else { tooltip.style.display='none'; }
+    return;
+  }
+  const hits=raycaster.intersectObjects(lmSpheres.map(s=>s.mesh),false);
+  if(hits.length>0){
+    const li=hits[0].object.userData.lmIndex,lm=state.landmarks[li];
+    tooltip.style.display='block'; tooltip.style.left=(e.clientX+12)+'px'; tooltip.style.top=(e.clientY-20)+'px';
+    tooltip.textContent=`Pair ${Math.floor(li/2)+1} · ${lm.side==='right'?'Right':'Left'}  (click to remove)`;
+  } else { tooltip.style.display='none'; }
+}
+
+function updateViewerGuide() {
+  const el = document.getElementById('viewer-guide-text');
+  const pairs = getPairedLM().length;
+  const odd   = state.landmarks.length % 2 !== 0;
+  const pairN = Math.floor(state.landmarks.length / 2) + 1;
+  let html = '';
+  if (!state.meshLoaded) {
+    html = `<span class="step-num">①</span>Drag a <span class="step-hi">3D model (PLY/OBJ)</span> or a <span class="step-hi">2D image (PNG/JPG)</span> into the viewer`;
+  } else if (pairs === 0 && !odd) {
+    html = `<span class="step-num">②</span>Switch to <span class="step-hi">Landmark mode</span> and click on the model to start placing Right / Left pairs`;
+  } else if (odd) {
+    html = `<span class="step-num">③</span>Pair ${pairN} — now click the <span class="step-warn">🔵 Left-side</span> counterpart on the opposite side of the specimen`;
+  } else if (pairs === 1) {
+    html = `<span class="step-num">③</span>Good! Add at least <span class="step-hi">one more pair</span> — you have ${pairs} pair so far, need ≥ 2`;
+  } else if (!state.retrodeformed) {
+    html = `<span class="step-num">④</span>${pairs} pair${pairs!==1?'s':''} ready — click <span class="step-hi">▶ Retrodeform</span> in the left panel to run the computation`;
+  } else if (!state.showingRetro) {
+    html = `<span class="step-num">⑤</span>Done! Toggle <span class="step-ok">Original / Retrodeformed</span> to compare the result, then download the ${state.is2D?'PNG':'PLY'}`;
+  } else {
+    html = `<span class="step-num">⑤</span><span class="step-ok">Retrodeformed view</span> — ${state.is2D?'retrodeformed image':'colour map shows vertex displacement'} &nbsp;·&nbsp; download ${state.is2D?'PNG':'PLY'} when ready`;
+  }
+  if(el.innerHTML !== html){
+    el.innerHTML = html;
+    const guide=document.getElementById('viewer-guide');
+    guide.classList.remove('guide-anim');
+    void guide.offsetWidth; // reflow to restart
+    guide.classList.add('guide-anim');
+    guide.addEventListener('animationend',()=>guide.classList.remove('guide-anim'),{once:true});
+  }
+}
+
+function setStatus(msg,type='ok'){ const el=document.getElementById('status-text'); el.textContent=msg; el.className=`status-${type}`; }
+function showProgress(f){ const pb=document.getElementById('progress-bar'); pb.style.display='block'; pb.style.transform=`scaleX(${f})`; }
+function hideProgress(){ const pb=document.getElementById('progress-bar'); pb.style.transition='none'; pb.style.transform='scaleX(0)'; pb.style.display='none'; pb.getBoundingClientRect(); pb.style.transition='transform .3s'; }
+
+function updateModeHint(){
+  const el=document.getElementById('mode-hint');
+  if(!state.meshLoaded) el.textContent='Load a 3D model to begin.';
+  else if(state.mode==='navigate') el.textContent='Use the mouse to orbit, zoom and pan the view.';
+  else { const side=state.nextSide==='right'?'🔴 right':'🔵 left'; el.innerHTML=`Click on the model to place the next LM (<strong>${side}</strong>).<br>Click a sphere to remove it.`; }
+}
+function updateLandmarkUI(){
+  const list=document.getElementById('lm-list'); list.innerHTML='';
+  const nPairs=Math.ceil(state.landmarks.length/2);
+  for(let i=0;i<nPairs;i++){
+    const right=state.landmarks[2*i],left=state.landmarks[2*i+1];
+    const div=document.createElement('div'); div.className='lm-pair';
+    div.innerHTML=`<span class="pair-num">Pair ${i+1}</span><span class="lm-dot ${right?'right':'empty'}"></span><span class="lm-dot ${left?'left':'empty'}"></span><button class="delete-pair" data-pair="${i}">✕</button>`;
+    list.appendChild(div);
+  }
+  list.querySelectorAll('.delete-pair').forEach(btn=>btn.addEventListener('click',()=>removeLandmark(parseInt(btn.dataset.pair)*2)));
+  const hint=document.getElementById('lm-next-hint');
+  if(state.mode==='landmarks'&&state.landmarks.length%2!==0){ hint.style.display='block'; hint.textContent='⬆ Now place the left-side landmark (🔵).'; }
+  else hint.style.display='none';
+  const pairs=getPairedLM().length;
+  document.getElementById('lm-header').textContent=`3 · Landmark pairs${state.landmarks.length?` (${pairs} pair${pairs!==1?'s':''})`:''}`;
+}
+function updateRetrodefButton(){
+  const pairs=getPairedLM().length, btn=document.getElementById('btn-retrodeform');
+  btn.disabled=pairs<2||!state.meshLoaded;
+  document.getElementById('btn-export-tps').disabled=pairs<1||!state.meshLoaded;
+  document.getElementById('btn-export-tps-sym').disabled=pairs<2||!state.meshLoaded;
+  document.getElementById('retrodef-hint').textContent=pairs<2?`You need ≥ 2 pairs (you have ${pairs}).`:`${pairs} pair${pairs!==1?'s':''} ready. Click to retrodeform!`;
+}
+function setViewUI(retroDone){
+  document.getElementById('btn-view-orig').disabled=!state.meshLoaded;
+  document.getElementById('btn-view-retro').disabled=!retroDone;
+  document.getElementById('btn-download').disabled=!retroDone;
+  const lmBtn=document.getElementById('btn-toggle-lm');
+  lmBtn.disabled=!retroDone;
+  if(retroDone){ lmBtn.classList.add('active'); lmVisible=true; lmGroup.visible=true; }
+  const bar=document.getElementById('view-toggle-bar');
+  if(retroDone) bar.classList.add('visible');
+  else { bar.classList.remove('visible'); syncViewButtons(false); document.getElementById('disp-legend').classList.remove('visible'); }
+}
+function syncViewButtons(showRetro){
+  ['btn-view-orig','btn-view-orig2'].forEach(id=>document.getElementById(id).classList.toggle('active',!showRetro));
+  ['btn-view-retro','btn-view-retro2'].forEach(id=>document.getElementById(id).classList.toggle('active',showRetro));
+}
+
+const dropZone=document.getElementById('drop-zone'), fileInput=document.getElementById('file-input');
+dropZone.addEventListener('click',()=>fileInput.click());
+dropZone.addEventListener('dragover',e=>{e.preventDefault();dropZone.classList.add('dragover');});
+dropZone.addEventListener('dragleave',()=>dropZone.classList.remove('dragover'));
+dropZone.addEventListener('drop',e=>{e.preventDefault();dropZone.classList.remove('dragover');if(e.dataTransfer.files[0])handleFile(e.dataTransfer.files[0]);});
+fileInput.addEventListener('change',()=>{if(fileInput.files[0])handleFile(fileInput.files[0]);});
+const viewerEl=document.getElementById('viewer');
+viewerEl.addEventListener('dragover',e=>{e.preventDefault();dropZone.classList.add('dragover');});
+viewerEl.addEventListener('dragleave',()=>dropZone.classList.remove('dragover'));
+viewerEl.addEventListener('drop',e=>{e.preventDefault();dropZone.classList.remove('dragover');if(e.dataTransfer.files[0])handleFile(e.dataTransfer.files[0]);});
+
+document.getElementById('btn-navigate').addEventListener('click',()=>setMode('navigate'));
+document.getElementById('btn-landmarks').addEventListener('click',()=>setMode('landmarks'));
+function setMode(m){
+  state.mode=m;
+  document.getElementById('btn-navigate').classList.toggle('active',m==='navigate');
+  document.getElementById('btn-landmarks').classList.toggle('active',m==='landmarks');
+  document.body.classList.toggle('mode-landmarks',m==='landmarks');
+  document.body.classList.toggle('mode-scale',m==='scale');
+  controls.enabled=m==='navigate';
+  const drawBtn=document.getElementById('btn-draw-scale');
+  if(drawBtn) drawBtn.classList.toggle('active',m==='scale');
+  updateModeHint(); updateLandmarkUI();
+}
+
+document.getElementById('btn-add-pair').addEventListener('click',()=>{
+  if(!state.meshLoaded) return;
+  if(state.landmarks.length%2!==0){setStatus('Complete the current pair before adding another.','warn');return;}
+  setMode('landmarks'); setStatus('Click on the model to place the right-side LM (🔴).','busy');
+});
+document.getElementById('btn-clear-lm').addEventListener('click',clearLandmarks);
+document.getElementById('btn-retrodeform').addEventListener('click',runRetrodef);
+['btn-view-orig','btn-view-orig2'].forEach(id=>document.getElementById(id).addEventListener('click',()=>{switchView(false);updateDispLegend();updateViewerGuide();}));
+['btn-view-retro','btn-view-retro2'].forEach(id=>document.getElementById(id).addEventListener('click',()=>{switchView(true);updateDispLegend();updateViewerGuide();}));
+document.getElementById('btn-download').addEventListener('click',downloadMesh);
+document.getElementById('btn-reset-cam').addEventListener('click',()=>{
+  if(!state.meshBBox) return;
+  const size=new THREE.Vector3(); state.meshBBox.getSize(size);
+  camera.position.set(0,0,Math.max(size.x,size.y,size.z)*2); controls.target.set(0,0,0); controls.update();
+});
+let wireframeOn=false;
+document.getElementById('btn-wireframe').addEventListener('click',()=>{
+  if(!meshObject) return; wireframeOn=!wireframeOn;
+  meshObject.material.wireframe=wireframeOn;
+  document.getElementById('btn-wireframe').classList.toggle('active',wireframeOn);
+});
+document.getElementById('lm-header').addEventListener('click',()=>{
+  const h=document.getElementById('lm-header'),b=document.getElementById('lm-body');
+  h.classList.toggle('collapsed'); b.style.display=h.classList.contains('collapsed')?'none':'block';
+});
+
+document.getElementById('btn-toggle-plane').addEventListener('click', toggleSymPlane);
+document.getElementById('btn-ortho').addEventListener('click', toggleOrtho);
+
+let lmVisible=true;
+document.getElementById('btn-toggle-lm').addEventListener('click', ()=>{
+  lmVisible=!lmVisible;
+  lmGroup.visible=lmVisible;
+  document.getElementById('btn-toggle-lm').classList.toggle('active', lmVisible);
+});
+
+let scaleVisible=false;
+document.getElementById('btn-toggle-scale').addEventListener('click', ()=>{
+  scaleVisible=!scaleVisible;
+  scaleGroup.visible=scaleVisible;
+  document.getElementById('btn-toggle-scale').classList.toggle('active', scaleVisible);
+});
+
+document.getElementById('mm-dist-input').addEventListener('input', updateMmScale);
+document.getElementById('btn-draw-scale').addEventListener('click',()=>{
+  if(!state.meshLoaded) return;
+  state.scalePts=[];
+  updateScaleHint();
+  setMode('scale');
+  setStatus('Click the first point on the mesh to start the scale bar.','busy');
+});
+document.getElementById('btn-reset-scale').addEventListener('click',()=>{
+  resetScalePts();
+  if(state.mode==='scale') setMode('navigate');
+});
+
+const overlay=document.getElementById('info-modal-overlay');
+document.getElementById('btn-info').addEventListener('click',()=>overlay.classList.add('open'));
+document.getElementById('info-close').addEventListener('click',()=>overlay.classList.remove('open'));
+overlay.addEventListener('click',e=>{if(e.target===overlay)overlay.classList.remove('open');});
+
+document.getElementById('btn-export-tps').addEventListener('click',()=>exportTPS(false));
+document.getElementById('btn-export-tps-sym').addEventListener('click',()=>exportTPS(true));
+
+// ── How to cite ─────────────────────────────────────────────────────────────
+const CITE_YEAR=2026;
+const thisYear=new Date().getFullYear();
+const yearStr=thisYear>CITE_YEAR?`${CITE_YEAR}–${thisYear}`:`${CITE_YEAR}`;
+document.getElementById('copy-year').textContent=yearStr;
+document.querySelectorAll('.copy-year').forEach(el=>el.textContent=yearStr);
+const appURL=/^https?:/.test(location.protocol)?location.origin+location.pathname:'';
+const today=new Date().toISOString().slice(0,10);
+const citePlain=`Sanisidro, O. (${CITE_YEAR}). RetroDeform: An online 3D retrodeformation tool [Software].`+
+  (appURL?` Available at ${appURL} (accessed ${today}).`:'');
+const citeBib=`@software{sanisidro_retrodeform_${CITE_YEAR},\n  author = {Sanisidro, Oscar},\n  title  = {RetroDeform: An online 3D retrodeformation tool},\n  year   = {${CITE_YEAR}},\n`+
+  (appURL?`  url    = {${appURL}},\n  urldate = {${today}},\n`:'')+`}`;
+document.getElementById('cite-text').textContent=citePlain;
+const citeOverlay=document.getElementById('cite-modal-overlay');
+document.getElementById('btn-cite').addEventListener('click',()=>citeOverlay.classList.add('open'));
+document.getElementById('cite-close').addEventListener('click',()=>citeOverlay.classList.remove('open'));
+citeOverlay.addEventListener('click',e=>{if(e.target===citeOverlay)citeOverlay.classList.remove('open');});
+function copyText(t){
+  const done=()=>{ const s=document.getElementById('cite-copied'); s.style.display='inline'; setTimeout(()=>s.style.display='none',1500); };
+  if(navigator.clipboard&&window.isSecureContext){ navigator.clipboard.writeText(t).then(done).catch(()=>fallback()); }
+  else fallback();
+  function fallback(){ const ta=document.createElement('textarea'); ta.value=t; document.body.appendChild(ta); ta.select(); try{document.execCommand('copy');done();}catch(e){} ta.remove(); }
+}
+document.getElementById('btn-copy-cite').addEventListener('click',()=>copyText(citePlain));
+document.getElementById('btn-copy-bib').addEventListener('click',()=>copyText(citeBib));
+
+setViewUI(false); updateLandmarkUI(); updateViewerGuide();
+</script>
+</body>
+</html>
