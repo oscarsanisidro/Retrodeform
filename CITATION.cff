@@ -1,0 +1,10 @@
+cff-version: 1.2.0
+message: "If you use RetroDeform, please cite it as below."
+title: "RetroDeform: An online 3D retrodeformation tool"
+authors:
+  - family-names: Sanisidro
+    given-names: Oscar
+type: software
+date-released: 2026-11-15
+url: "https://oscarsanisidro.github.io/RetroDeform/"
+repository-code: "https://github.com/oscarsanisidro/RetroDeform"
