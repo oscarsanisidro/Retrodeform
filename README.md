@@ -44,7 +44,22 @@ RetroDeform follows the bilateral-symmetry approach implemented in `Morpho::retr
 
 If you use RetroDeform in your research, please cite:
 
-> Sanisidro, O. (2026). *RetroDeform: An online 3D retrodeformation tool* [Software]. https://oscarsanisidro.github.io/RetroDeform/
+> Sanisidro, O. (2026). *RetroDeform: An online 3D retrodeformation tool* [Software]. Zenodo. https://doi.org/10.5281/zenodo.24245098
+
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.24245098.svg)](https://doi.org/10.5281/zenodo.24245098)
+
+BibTeX:
+
+```bibtex
+@software{sanisidro_retrodeform_2026,
+  author    = {Sanisidro, Oscar},
+  title     = {RetroDeform: An online 3D retrodeformation tool},
+  year      = {2026},
+  publisher = {Zenodo},
+  doi       = {10.5281/zenodo.24245098},
+  url       = {https://doi.org/10.5281/zenodo.24245098}
+}
+```
 
 You can also use GitHub's **"Cite this repository"** button or the **❝ How to cite** button inside the app.
 
